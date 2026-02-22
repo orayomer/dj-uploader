@@ -1,0 +1,920 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>DJ Song Uploader</title>
+  <!-- Google Identity Services -->
+  <script src="https://accounts.google.com/gsi/client" async defer></script>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    :root{
+      --bg:#0d0d1a;--surface:#1a1a2e;--surface2:#16213e;
+      --accent:#e94560;--accent2:#0f3460;--purple:#7b2d8b;
+      --green:#00d4aa;--yellow:#ffd166;--orange:#ff9f43;
+      --text:#e0e0ff;--muted:#8888aa;--border:#2a2a4a;
+    }
+    body{background:var(--bg);color:var(--text);font-family:'Segoe UI',system-ui,sans-serif;min-height:100vh;padding:24px 16px}
+
+    /* Header */
+    header{text-align:center;margin-bottom:28px}
+    .logo{font-size:2.1rem;font-weight:800;background:linear-gradient(135deg,var(--accent),var(--purple),var(--green));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text}
+    .tagline{color:var(--muted);font-size:0.85rem;margin-top:4px}
+
+    /* Auth banner */
+    #auth-banner{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:28px 24px;text-align:center;margin-bottom:20px}
+    #auth-banner h2{font-size:1.1rem;margin-bottom:8px}
+    #auth-banner p{color:var(--muted);font-size:0.85rem;margin-bottom:20px;line-height:1.6}
+    .auth-user{display:flex;align-items:center;gap:12px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 14px;margin-bottom:14px}
+    .auth-avatar{width:36px;height:36px;border-radius:50%;border:2px solid var(--green)}
+    .auth-name{font-weight:600;font-size:0.9rem}
+    .auth-email{font-size:0.76rem;color:var(--muted)}
+    .btn-signout{margin-left:auto;background:none;border:1px solid var(--border);color:var(--muted);padding:5px 12px;border-radius:8px;font-size:0.78rem;cursor:pointer}
+    .btn-signout:hover{border-color:var(--accent);color:var(--accent)}
+
+    /* Tabs */
+    .tabs{display:flex;gap:4px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:4px;margin-bottom:20px}
+    .tab-btn{flex:1;padding:9px;border:none;border-radius:9px;background:transparent;color:var(--muted);font-size:0.85rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+    .tab-btn.active{background:var(--accent2);color:var(--text)}
+    .tab-panel{display:none}.tab-panel.active{display:block}
+
+    .container{max-width:900px;margin:0 auto;display:grid;gap:20px}
+    .card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:22px}
+    .card-title{font-size:0.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px}
+
+    /* Upload */
+    .uploader-row{display:flex;gap:10px;margin-bottom:14px}
+    .uploader-row input{flex:1;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:11px 14px;color:var(--text);font-size:0.92rem;outline:none;transition:border 0.2s}
+    .uploader-row input:focus{border-color:var(--accent)}
+    .uploader-row input::placeholder{color:var(--muted)}
+    .drop-zone{border:2px dashed var(--border);border-radius:14px;padding:32px 20px;text-align:center;cursor:pointer;transition:all 0.25s;position:relative}
+    .drop-zone.dragover{border-color:var(--accent);background:rgba(233,69,96,0.06)}
+    .drop-zone.disabled{opacity:0.4;pointer-events:none}
+    .drop-zone input[type="file"]{position:absolute;inset:0;opacity:0;cursor:pointer}
+    .drop-icon{font-size:2.6rem;margin-bottom:8px}
+    .drop-text{color:var(--muted);font-size:0.9rem}.drop-text strong{color:var(--text)}
+    .file-types{margin-top:5px;font-size:0.77rem;color:var(--muted)}
+    #file-queue{margin-top:14px;display:flex;flex-direction:column;gap:7px}
+
+    /* File items */
+    .file-item{background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;display:flex;align-items:center;gap:9px;transition:border-color 0.2s}
+    .file-item.uploading-active{border-color:rgba(112,184,255,0.4)}
+    .file-item.done-active{border-color:rgba(0,212,170,0.3)}
+    .file-item.dupe-active{border-color:rgba(233,69,96,0.3)}
+    .file-icon{font-size:1.2rem;flex-shrink:0}
+    .file-info{flex:1;min-width:0}
+    .file-name{font-size:0.86rem;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .file-meta{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;align-items:center}
+    .fmt{font-size:0.71rem;color:var(--muted)}
+    .fmt.hi{color:var(--green)}.fmt.warn{color:var(--yellow)}.fmt.bad{color:var(--accent)}
+    .file-bar{height:3px;background:var(--border);border-radius:99px;overflow:hidden;margin-top:5px}
+    .file-bar-fill{height:100%;width:0%;border-radius:99px;background:linear-gradient(90deg,#70b8ff,var(--purple));transition:width 0.2s}
+
+    /* Buttons */
+    .btn-row{display:flex;gap:9px;margin-top:14px;flex-wrap:wrap}
+    .btn{display:inline-flex;align-items:center;gap:6px;padding:10px 18px;border-radius:10px;font-size:0.9rem;font-weight:700;cursor:pointer;border:none;transition:all 0.2s}
+    .btn:disabled{opacity:0.4;cursor:not-allowed}
+    .btn-primary{background:linear-gradient(135deg,var(--accent),var(--purple));color:#fff}
+    .btn-primary:hover:not(:disabled){filter:brightness(1.15);transform:translateY(-1px)}
+    .btn-spotify{background:linear-gradient(135deg,#1db954,#158a3e);color:#fff}
+    .btn-spotify:hover:not(:disabled){filter:brightness(1.12)}
+    .btn-secondary{background:var(--surface2);color:var(--muted);border:1px solid var(--border)}
+    .btn-secondary:hover:not(:disabled){color:var(--text);border-color:var(--muted)}
+    .file-status{font-size:0.76rem;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap}
+    .status-pending{background:rgba(255,209,102,0.15);color:var(--yellow)}
+    .status-uploading{background:rgba(15,52,96,0.5);color:#70b8ff}
+    .status-success{background:rgba(0,212,170,0.15);color:var(--green)}
+    .status-duplicate{background:rgba(233,69,96,0.15);color:var(--accent)}
+    .status-error{background:rgba(200,80,80,0.15);color:#ff8080}
+    .remove-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:0.95rem;padding:3px;border-radius:5px}
+    .remove-btn:hover{color:var(--accent)}
+
+    /* Progress bar (overall) */
+    #progress-container{display:none;margin-top:14px}
+    .progress-label{font-size:0.79rem;color:var(--muted);margin-bottom:5px;display:flex;justify-content:space-between}
+    .progress-bar{height:5px;background:var(--border);border-radius:99px;overflow:hidden}
+    .progress-fill{height:100%;background:linear-gradient(90deg,var(--accent),var(--purple));border-radius:99px;transition:width 0.3s;width:0%}
+
+    /* Mini checklist */
+    .mini-checklist-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:18px 22px;margin-top:0}
+    .mini-cl-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;flex-wrap:wrap;gap:8px}
+    .mini-cl-title{font-size:0.82rem;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px}
+    .mini-cl-stats{display:flex;gap:7px;flex-wrap:wrap}
+    .mini-stat{font-size:0.76rem;font-weight:700;padding:3px 10px;border-radius:20px}
+    .mini-stat-done{background:rgba(0,212,170,0.15);color:var(--green)}
+    .mini-stat-todo{background:rgba(255,159,67,0.15);color:var(--orange)}
+    .mini-progress{height:4px;background:var(--border);border-radius:99px;overflow:hidden;margin-bottom:12px}
+    .mini-progress-fill{height:100%;background:linear-gradient(90deg,var(--green),#1db954);border-radius:99px;transition:width 0.5s}
+    .mini-cl-filters{display:flex;gap:5px;margin-bottom:10px}
+    .mini-filter-btn{padding:3px 11px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:0.74rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+    .mini-filter-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(233,69,96,0.1)}
+    .mini-cl-list{display:flex;flex-direction:column;gap:4px;max-height:320px;overflow-y:auto;padding-right:3px}
+    .mini-cl-list::-webkit-scrollbar{width:3px}
+    .mini-cl-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+    .mini-cl-item{display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;border:1px solid transparent;font-size:0.81rem;cursor:pointer;transition:filter 0.15s}
+    .mini-cl-item:hover{filter:brightness(1.2)}
+    .mini-cl-item.done{background:rgba(0,212,170,0.05);border-color:rgba(0,212,170,0.15)}
+    .mini-cl-item.missing{background:rgba(255,159,67,0.04);border-color:rgba(255,159,67,0.1)}
+    .mini-cl-num{font-size:0.69rem;color:var(--muted);min-width:20px;text-align:right}
+    .mini-cl-name{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .track-title{font-weight:600;color:var(--text)}
+    .track-artist{color:var(--muted);font-size:0.74rem}
+    .mini-cl-badge{font-size:0.69rem;font-weight:700;padding:2px 7px;border-radius:20px;white-space:nowrap}
+    .badge-done{background:rgba(0,212,170,0.15);color:var(--green)}
+    .badge-missing{background:rgba(255,159,67,0.15);color:var(--orange)}
+    .mini-cl-loading{text-align:center;padding:22px;color:var(--muted);font-size:0.84rem}
+
+    /* Full checklist */
+    .playlist-meta{background:var(--surface2);border:1px solid var(--border);border-radius:12px;padding:14px 18px;margin-bottom:16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+    .playlist-name{font-size:0.95rem;font-weight:700;flex:1}
+    .stat-pill{background:var(--bg);border:1px solid var(--border);border-radius:20px;padding:4px 12px;font-size:0.8rem;font-weight:600;white-space:nowrap}
+    .stat-pill.done{border-color:var(--green);color:var(--green)}
+    .stat-pill.todo{border-color:var(--orange);color:var(--orange)}
+    .stat-pill.total{border-color:var(--muted);color:var(--muted)}
+    .checklist-filters{display:flex;gap:7px;margin-bottom:12px;flex-wrap:wrap}
+    .filter-btn{padding:5px 13px;border-radius:20px;border:1px solid var(--border);background:transparent;color:var(--muted);font-size:0.78rem;font-weight:600;cursor:pointer;transition:all 0.2s}
+    .filter-btn.active{border-color:var(--accent);color:var(--accent);background:rgba(233,69,96,0.1)}
+    .checklist{display:flex;flex-direction:column;gap:5px;max-height:500px;overflow-y:auto;padding-right:3px}
+    .checklist::-webkit-scrollbar{width:3px}
+    .checklist::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+    .cl-item{display:flex;align-items:center;gap:10px;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:10px 13px;cursor:pointer;transition:filter 0.15s}
+    .cl-item:hover{filter:brightness(1.15)}
+    .cl-item.is-uploaded{border-color:rgba(0,212,170,0.25)}
+    .cl-item.is-missing{border-color:rgba(255,159,67,0.2)}
+    .cl-num{font-size:0.73rem;color:var(--muted);min-width:22px;text-align:right;font-weight:600}
+    .cl-info{flex:1;min-width:0}
+    .cl-title{font-size:0.86rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cl-artist{font-size:0.74rem;color:var(--muted);margin-top:2px}
+    .cl-match{font-size:0.72rem;color:var(--green);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .cl-badge{font-size:0.73rem;font-weight:700;padding:3px 9px;border-radius:20px;white-space:nowrap;flex-shrink:0}
+    .badge-uploaded{background:rgba(0,212,170,0.15);color:var(--green)}
+    .badge-missing{background:rgba(255,159,67,0.15);color:var(--orange)}
+    .sim-bar{width:40px;flex-shrink:0}
+    .sim-bar-bg{height:3px;background:var(--border);border-radius:99px;overflow:hidden}
+    .sim-bar-fill{height:100%;border-radius:99px}
+    .checklist-loading{text-align:center;padding:40px;color:var(--muted)}
+    .spinner{display:inline-block;width:24px;height:24px;border:3px solid var(--border);border-top-color:#1db954;border-radius:50%;animation:spin 0.8s linear infinite;margin-bottom:10px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+
+    /* Library */
+    .library-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+    .song-count{background:var(--accent2);color:var(--green);font-size:0.78rem;font-weight:700;padding:3px 11px;border-radius:20px}
+    .search-input{width:100%;background:var(--surface2);border:1px solid var(--border);border-radius:10px;padding:9px 14px;color:var(--text);font-size:0.88rem;outline:none;margin-bottom:14px;transition:border 0.2s}
+    .search-input:focus{border-color:var(--accent)}
+    .search-input::placeholder{color:var(--muted)}
+    #song-table-wrap{overflow-x:auto;border-radius:10px;border:1px solid var(--border)}
+    table{width:100%;border-collapse:collapse;font-size:0.85rem}
+    thead th{background:var(--surface2);color:var(--muted);font-weight:600;text-transform:uppercase;font-size:0.71rem;letter-spacing:0.5px;padding:10px 13px;text-align:left;border-bottom:1px solid var(--border)}
+    tbody tr{border-bottom:1px solid var(--border);transition:background 0.15s}
+    tbody tr:last-child{border-bottom:none}
+    tbody tr:hover{background:rgba(255,255,255,0.025)}
+    tbody td{padding:9px 13px;color:var(--text);vertical-align:middle}
+    .filename-cell{max-width:230px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+    .uploader-badge{display:inline-block;background:var(--accent2);color:#aaddff;font-size:0.72rem;padding:2px 8px;border-radius:20px;font-weight:600}
+    .drive-link{color:var(--green);text-decoration:none;font-size:0.78rem;font-weight:600}
+    .drive-link:hover{text-decoration:underline}
+    .no-songs{text-align:center;padding:32px;color:var(--muted)}
+
+    /* Settings */
+    .settings-row{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+    .settings-label{font-size:0.83rem;color:var(--muted);flex:1}
+    .settings-label strong{color:var(--text)}
+    input[type="range"]{flex:2;accent-color:var(--accent);min-width:130px}
+    .threshold-val{font-size:0.95rem;font-weight:800;color:var(--accent);min-width:40px;text-align:right}
+
+    /* Copy toast */
+    .copy-toast{position:fixed;bottom:68px;left:50%;transform:translateX(-50%) translateY(20px);background:#222240;border:1px solid var(--green);color:var(--green);font-size:0.8rem;font-weight:700;padding:6px 16px;border-radius:20px;opacity:0;transition:all 0.25s;pointer-events:none;z-index:1000;white-space:nowrap}
+    .copy-toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+    /* Toast */
+    #toast{position:fixed;bottom:22px;right:22px;max-width:320px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;font-size:0.86rem;box-shadow:0 8px 32px rgba(0,0,0,0.5);transform:translateY(100px);opacity:0;transition:all 0.3s;z-index:999}
+    #toast.show{transform:translateY(0);opacity:1}
+    #toast.toast-success{border-color:var(--green)}
+    #toast.toast-error{border-color:var(--accent)}
+    #toast.toast-warn{border-color:var(--yellow)}
+
+    @media(max-width:600px){.btn-row,.uploader-row{flex-direction:column}}
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎧 DJ Song Uploader</div>
+  <p class="tagline">Direct Drive uploads · Duplicate detection · Gig checklist</p>
+</header>
+
+<div class="container">
+
+  <!-- AUTH BANNER -->
+  <div id="auth-banner">
+    <div id="auth-signed-out">
+      <h2>🔐 Sign in with Google</h2>
+      <p>Sign in to upload songs directly to Google Drive at full speed.<br>Only your Google account is used — no data is stored elsewhere.</p>
+      <div id="g-signin-btn"></div>
+    </div>
+    <div id="auth-signed-in" style="display:none">
+      <div class="auth-user">
+        <img class="auth-avatar" id="auth-avatar" src="" alt=""/>
+        <div>
+          <div class="auth-name" id="auth-name"></div>
+          <div class="auth-email" id="auth-email"></div>
+        </div>
+        <button class="btn-signout" onclick="signOut()">Sign out</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TABS -->
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="upload"    onclick="switchTab(this,'upload')">⬆️ Upload</button>
+    <button class="tab-btn"        data-tab="checklist" onclick="switchTab(this,'checklist')">🎵 Checklist</button>
+    <button class="tab-btn"        data-tab="library"   onclick="switchTab(this,'library')">📂 Library</button>
+    <button class="tab-btn"        data-tab="settings"  onclick="switchTab(this,'settings')">⚙️ Settings</button>
+  </div>
+
+  <!-- ===== UPLOAD TAB ===== -->
+  <div id="tab-upload" class="tab-panel active">
+    <div class="card">
+      <div class="card-title">🎵 Upload Songs</div>
+      <div class="uploader-row">
+        <input type="text" id="uploader-name" placeholder="Your DJ name (e.g. DJ Omer)" maxlength="40"/>
+      </div>
+      <div class="drop-zone disabled" id="drop-zone">
+        <input type="file" id="file-input" multiple accept="audio/*,.mp3,.wav,.flac,.aac,.ogg,.m4a,.aiff" disabled/>
+        <div class="drop-icon">🎶</div>
+        <div class="drop-text" id="drop-text"><strong>Sign in above</strong> to enable uploads</div>
+        <div class="file-types">MP3 · WAV · FLAC · AAC · OGG · M4A · AIFF</div>
+      </div>
+      <div id="file-queue"></div>
+      <div id="progress-container">
+        <div class="progress-label">
+          <span id="progress-text">Uploading...</span>
+          <span id="progress-pct">0%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn btn-primary" id="upload-btn" disabled>⬆️ Upload All</button>
+        <button class="btn btn-secondary" id="clear-btn">🗑️ Clear</button>
+      </div>
+    </div>
+
+    <!-- MINI CHECKLIST -->
+    <div class="mini-checklist-card">
+      <div class="mini-cl-header">
+        <div class="mini-cl-title">🎵 Gig Playlist Progress</div>
+        <div class="mini-cl-stats">
+          <span class="mini-stat mini-stat-done" id="mini-done-stat">✅ 0 uploaded</span>
+          <span class="mini-stat mini-stat-todo" id="mini-todo-stat">⏳ 0 missing</span>
+        </div>
+      </div>
+      <div class="mini-progress"><div class="mini-progress-fill" id="mini-progress-fill" style="width:0%"></div></div>
+      <div class="mini-cl-filters">
+        <button class="mini-filter-btn active" id="mini-filter-all"      onclick="setMiniFilter('all')">All</button>
+        <button class="mini-filter-btn"        id="mini-filter-missing"  onclick="setMiniFilter('missing')">⏳ Missing</button>
+        <button class="mini-filter-btn"        id="mini-filter-uploaded" onclick="setMiniFilter('uploaded')">✅ Uploaded</button>
+      </div>
+      <div class="mini-cl-list" id="mini-cl-list">
+        <div class="mini-cl-loading"><div class="spinner" style="width:20px;height:20px;border-width:2px;display:inline-block"></div><br>Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== CHECKLIST TAB ===== -->
+  <div id="tab-checklist" class="tab-panel">
+    <div class="card">
+      <div class="card-title">🎵 JOS Party — Playlist Checklist</div>
+      <p style="color:var(--muted);font-size:0.83rem;margin-bottom:14px">135 tracks. Click any track to copy its name. Shows which are uploaded to Drive and which still need to be added.</p>
+      <div class="btn-row" style="margin-bottom:12px">
+        <button class="btn btn-spotify" id="fetch-btn" onclick="fetchPlaylist()">🔄 Refresh</button>
+      </div>
+      <div id="checklist-area"></div>
+    </div>
+  </div>
+
+  <!-- ===== LIBRARY TAB ===== -->
+  <div id="tab-library" class="tab-panel">
+    <div class="card">
+      <div class="library-header">
+        <div class="card-title" style="margin:0">📂 Song Library</div>
+        <span class="song-count" id="song-count">Loading...</span>
+      </div>
+      <input type="text" class="search-input" id="search-input" placeholder="🔍  Search songs..."/>
+      <div id="song-table-wrap">
+        <table>
+          <thead><tr><th>Song</th><th>Uploaded By</th><th>Date</th><th>Size</th><th>Drive</th></tr></thead>
+          <tbody id="song-tbody"><tr><td colspan="5" class="no-songs">Loading...</td></tr></tbody>
+        </table>
+      </div>
+      <div class="btn-row" style="margin-top:12px">
+        <button class="btn btn-secondary" id="refresh-btn">🔄 Refresh</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== SETTINGS TAB ===== -->
+  <div id="tab-settings" class="tab-panel">
+    <div class="card">
+      <div class="card-title">⚙️ Sensitivity Settings</div>
+      <p style="color:var(--muted);font-size:0.8rem;margin-bottom:16px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Duplicate Upload Block</p>
+      <div class="settings-row">
+        <div class="settings-label">Block if filenames are at least <strong id="threshold-label">75%</strong> similar.<br><small style="font-size:0.75rem">Lower = block more · Higher = only obvious dupes</small></div>
+        <input type="range" id="threshold-slider" min="50" max="100" value="75" step="5"/>
+        <div class="threshold-val" id="threshold-val">75%</div>
+      </div>
+      <p style="color:var(--muted);font-size:0.8rem;margin-bottom:16px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Playlist Checklist Match</p>
+      <div class="settings-row">
+        <div class="settings-label">Mark ✅ uploaded if match is at least <strong id="cl-threshold-label">45%</strong>.<br><small style="font-size:0.75rem">Lower = more tracks marked uploaded</small></div>
+        <input type="range" id="cl-threshold-slider" min="20" max="90" value="45" step="5"/>
+        <div class="threshold-val" id="cl-threshold-val">45%</div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-title">ℹ️ How It Works</div>
+      <p style="color:var(--muted);font-size:0.83rem;line-height:1.7">
+        Files are uploaded <strong style="color:var(--text)">directly from your browser to Google Drive</strong> at full network speed — no server middleman.<br><br>
+        Apps Script is only used for the <strong style="color:var(--text)">duplicate check</strong> (reads filenames from the Sheet) and <strong style="color:var(--text)">logging</strong> the upload metadata after it completes.<br><br>
+        Matching uses <strong style="color:var(--text)">Levenshtein distance + containment scoring</strong> after normalizing filenames (removing extensions, brackets, remix tags, etc).
+      </p>
+    </div>
+  </div>
+
+</div><!-- /container -->
+
+<div class="copy-toast" id="copy-toast">📋 Copied!</div>
+<div id="toast"></div>
+
+<script>
+// ================================================================
+// CONFIG — paste your OAuth Client ID here
+// ================================================================
+var OAUTH_CLIENT_ID  = '924579257210-iocnuvrhcg9tmfvg0onnmdvfnkmt9oaq.apps.googleusercontent.com';
+var DRIVE_FOLDER_ID  = '1xHaVCCkEmy0MWh7VCOOLR-cOPzHHhrEf';
+var DRIVE_SCOPE      = 'https://www.googleapis.com/auth/drive.file';
+
+// ================================================================
+// STATE
+// ================================================================
+var accessToken        = null;
+var pendingFiles       = [];
+var allSongs           = [];
+var threshold          = 75;
+var checklistThreshold = 45;
+var checklistData      = null;
+var clFilter           = 'all';
+var miniFilter         = 'all';
+var miniData           = null;
+
+// ================================================================
+// GOOGLE SIGN-IN (GIS)
+// ================================================================
+var tokenClient;
+
+function initGoogleAuth() {
+  google.accounts.id.initialize({
+    client_id: OAUTH_CLIENT_ID,
+    callback: onSignIn,
+  });
+  google.accounts.id.renderButton(document.getElementById('g-signin-btn'), {
+    theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'pill',
+  });
+
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: OAUTH_CLIENT_ID,
+    scope: DRIVE_SCOPE,
+    callback: onTokenReceived,
+  });
+}
+
+function onSignIn(credentialResponse) {
+  // Decode JWT to get user info
+  var payload = JSON.parse(atob(credentialResponse.credential.split('.')[1]));
+  document.getElementById('auth-name').textContent   = payload.name;
+  document.getElementById('auth-email').textContent  = payload.email;
+  document.getElementById('auth-avatar').src         = payload.picture;
+  document.getElementById('auth-signed-out').style.display = 'none';
+  document.getElementById('auth-signed-in').style.display  = 'block';
+
+  // Pre-fill DJ name from Google name
+  if (!document.getElementById('uploader-name').value)
+    document.getElementById('uploader-name').value = payload.given_name || payload.name;
+
+  // Request Drive access token
+  tokenClient.requestAccessToken({ prompt: '' });
+}
+
+function onTokenReceived(resp) {
+  if (resp.error) { showToast('❌ Drive access denied: ' + resp.error, 'error'); return; }
+  accessToken = resp.access_token;
+  enableUpload();
+  showToast('✅ Signed in! Ready to upload at full speed.', 'success');
+}
+
+function signOut() {
+  google.accounts.id.disableAutoSelect();
+  accessToken = null;
+  disableUpload();
+  document.getElementById('auth-signed-out').style.display = 'block';
+  document.getElementById('auth-signed-in').style.display  = 'none';
+}
+
+function enableUpload() {
+  var dz = document.getElementById('drop-zone');
+  dz.classList.remove('disabled');
+  document.getElementById('file-input').disabled = false;
+  document.getElementById('drop-text').innerHTML = '<strong>Drop songs here</strong> or click to browse';
+}
+
+function disableUpload() {
+  var dz = document.getElementById('drop-zone');
+  dz.classList.add('disabled');
+  document.getElementById('file-input').disabled = true;
+  document.getElementById('upload-btn').disabled = true;
+  document.getElementById('drop-text').innerHTML = '<strong>Sign in above</strong> to enable uploads';
+}
+
+window.addEventListener('load', function() {
+  // GIS loads async — wait for it
+  var checkGIS = setInterval(function() {
+    if (window.google && google.accounts) {
+      clearInterval(checkGIS);
+      initGoogleAuth();
+    }
+  }, 100);
+});
+
+// ================================================================
+// TABS
+// ================================================================
+function switchTab(btn, name) {
+  document.querySelectorAll('.tab-panel').forEach(function(p){ p.classList.remove('active'); });
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('tab-' + name).classList.add('active');
+  btn.classList.add('active');
+  if (name === 'library')   loadSongs();
+  if (name === 'checklist' && !checklistData) fetchPlaylist();
+}
+
+// ================================================================
+// DRAG & DROP
+// ================================================================
+var dropZone  = document.getElementById('drop-zone');
+var fileInput = document.getElementById('file-input');
+
+dropZone.addEventListener('dragover',  function(e){ e.preventDefault(); if(!dropZone.classList.contains('disabled')) dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', function(){ dropZone.classList.remove('dragover'); });
+dropZone.addEventListener('drop', function(e){
+  e.preventDefault(); dropZone.classList.remove('dragover');
+  if (!accessToken) return;
+  addFiles([].slice.call(e.dataTransfer.files));
+});
+fileInput.addEventListener('change', function(e){
+  addFiles([].slice.call(e.target.files));
+  fileInput.value = '';
+});
+
+function addFiles(files) {
+  files.forEach(function(f){
+    if (!pendingFiles.find(function(p){ return p.file.name === f.name; }))
+      pendingFiles.push({ file:f, status:'pending', speed:'', elapsed:'', eta:'', sizeMB:'', dupeInfo:'', error:'' });
+  });
+  renderQueue();
+  document.getElementById('upload-btn').disabled = (pendingFiles.length === 0 || !accessToken);
+}
+
+function removeFile(i) {
+  pendingFiles.splice(i,1); renderQueue();
+  document.getElementById('upload-btn').disabled = pendingFiles.length === 0;
+}
+
+function renderQueue() {
+  var q = document.getElementById('file-queue');
+  if (!pendingFiles.length){ q.innerHTML=''; return; }
+  q.innerHTML = pendingFiles.map(function(item,i){
+    var bc = item.status==='uploading'?'uploading-active':item.status==='success'?'done-active':item.status==='duplicate'?'dupe-active':'';
+    var metas = ['<span class="fmt">💾 '+formatSize(item.file.size)+'</span>'];
+    if (item.speed)    metas.push('<span class="fmt hi">⚡ '+item.speed+'</span>');
+    if (item.elapsed)  metas.push('<span class="fmt warn">⏱ '+item.elapsed+'</span>');
+    if (item.eta)      metas.push('<span class="fmt">🏁 ETA '+item.eta+'</span>');
+    if (item.sizeMB)   metas.push('<span class="fmt hi">✅ '+item.sizeMB+' MB</span>');
+    if (item.dupeInfo) metas.push('<span class="fmt bad">🚫 '+esc(item.dupeInfo)+'</span>');
+    if (item.error)    metas.push('<span class="fmt bad">❌ '+esc(item.error)+'</span>');
+    var bar = item.status==='uploading'
+      ? '<div class="file-bar"><div class="file-bar-fill" id="bar-'+i+'"></div></div>' : '';
+    return '<div class="file-item '+bc+'" id="fitem-'+i+'">'
+      +'<div class="file-icon">🎵</div>'
+      +'<div class="file-info">'
+        +'<div class="file-name" title="'+esc(item.file.name)+'">'+esc(item.file.name)+'</div>'
+        +'<div class="file-meta">'+metas.join('')+'</div>'
+        +bar
+      +'</div>'
+      +'<span class="file-status status-'+item.status+'">'+statusLabel(item.status)+'</span>'
+      +(item.status==='pending'?'<button class="remove-btn" onclick="removeFile('+i+')">✕</button>':'')
+    +'</div>';
+  }).join('');
+}
+
+function statusLabel(s){
+  return {pending:'⏳ Pending',uploading:'⬆️ Uploading',success:'✅ Done',duplicate:'🚫 Duplicate',error:'❌ Error'}[s]||s;
+}
+
+// ================================================================
+// CLEAR & SETTINGS
+// ================================================================
+document.getElementById('clear-btn').addEventListener('click', function(){
+  pendingFiles=[]; renderQueue();
+  document.getElementById('upload-btn').disabled=true;
+  document.getElementById('progress-container').style.display='none';
+});
+
+document.getElementById('threshold-slider').addEventListener('input', function(){
+  threshold=parseInt(this.value);
+  document.getElementById('threshold-val').textContent=threshold+'%';
+  document.getElementById('threshold-label').textContent=threshold+'%';
+});
+
+document.getElementById('cl-threshold-slider').addEventListener('input', function(){
+  checklistThreshold=parseInt(this.value);
+  document.getElementById('cl-threshold-val').textContent=checklistThreshold+'%';
+  document.getElementById('cl-threshold-label').textContent=checklistThreshold+'%';
+  if(checklistData){
+    checklistData.checklist.forEach(function(t){ t.uploaded=t.similarity>=checklistThreshold; });
+    checklistData.uploadedCount=checklistData.checklist.filter(function(t){ return t.uploaded; }).length;
+    checklistData.missingCount=checklistData.totalTracks-checklistData.uploadedCount;
+    renderChecklist();
+  }
+});
+
+// ================================================================
+// UPLOAD — browser → Drive API directly (full speed!)
+// ================================================================
+document.getElementById('upload-btn').addEventListener('click', async function(){
+  if (!accessToken) { showToast('Please sign in first', 'warn'); return; }
+  var uploaderName = document.getElementById('uploader-name').value.trim() || 'Anonymous';
+  var toUpload = pendingFiles.filter(function(p){ return p.status==='pending'; });
+  if (!toUpload.length){ showToast('No pending files!','warn'); return; }
+
+  document.getElementById('upload-btn').disabled=true;
+  document.getElementById('progress-container').style.display='block';
+  updateProgress(0,'0 / '+toUpload.length);
+
+  var batchStart=Date.now(), doneBytes=0;
+
+  for (var i=0; i<toUpload.length; i++) {
+    var item=toUpload[i];
+    item.status='uploading'; item.speed=''; item.elapsed=''; item.eta=''; item.sizeMB=''; item.dupeInfo=''; item.error='';
+    renderQueue();
+    updateProgress((i/toUpload.length)*100,(i+1)+' / '+toUpload.length);
+
+    var fileStart=Date.now();
+    // Live elapsed ticker
+    var ticker=setInterval(function(){
+      var el=((Date.now()-fileStart)/1000).toFixed(1);
+      item.elapsed=el+'s';
+      var metaEl=document.querySelector('#fitem-'+i+' .file-meta');
+      if(metaEl) metaEl.querySelectorAll('.fmt.warn').forEach(function(t){ if(t.textContent.startsWith('⏱')) t.textContent='⏱ '+el+'s'; });
+    },400);
+
+    try {
+      // STEP 1: Check duplicate via Apps Script (fast — no file sent)
+      var check = await callServer('checkBeforeUpload',{ filename:item.file.name, threshold:threshold });
+
+      if (!check.allowed) {
+        clearInterval(ticker);
+        item.status='duplicate';
+        item.elapsed=((Date.now()-fileStart)/1000).toFixed(1)+'s';
+        item.dupeInfo=check.similarity+'% match with: '+check.matchedFile;
+        showToast('🚫 Duplicate: '+item.file.name,'warn');
+        renderQueue();
+        continue;
+      }
+
+      // STEP 2: Upload directly to Drive API (full browser speed!)
+      var driveResult = await uploadToDriveAPI(item.file, function(pct){
+        var barEl = document.getElementById('bar-'+i);
+        if(barEl) barEl.style.width=pct+'%';
+      });
+
+      clearInterval(ticker);
+      var elapsed=(Date.now()-fileStart)/1000;
+      var fileMB=item.file.size/(1024*1024);
+      item.speed=(fileMB/elapsed).toFixed(2)+' MB/s';
+      item.elapsed=elapsed.toFixed(1)+'s';
+      item.sizeMB=fileMB.toFixed(2);
+      doneBytes+=item.file.size;
+
+      // ETA for remaining
+      var remaining=toUpload.slice(i+1).reduce(function(s,it){ return s+it.file.size; },0);
+      var bps=doneBytes/((Date.now()-batchStart)/1000);
+      if(bps>0 && i+1<toUpload.length) toUpload[i+1].eta=Math.ceil(remaining/bps)+'s';
+
+      // STEP 3: Log to Sheet via Apps Script
+      await callServer('logUpload',{
+        filename:  item.file.name,
+        uploader:  uploaderName,
+        fileId:    driveResult.id,
+        fileUrl:   'https://drive.google.com/file/d/'+driveResult.id+'/view',
+        fileSizeMB:item.sizeMB,
+      });
+
+      item.status='success';
+      showToast('✅ '+item.file.name+' uploaded!','success');
+
+    } catch(err) {
+      clearInterval(ticker);
+      item.status='error';
+      item.elapsed=((Date.now()-fileStart)/1000).toFixed(1)+'s';
+      item.error=err.message;
+      showToast('❌ Error: '+item.file.name,'error');
+    }
+    renderQueue();
+  }
+
+  updateProgress(100,'Done!');
+  setTimeout(function(){ document.getElementById('progress-container').style.display='none'; },2000);
+  document.getElementById('upload-btn').disabled=false;
+  refreshMiniChecklist();
+  if(checklistData) refreshChecklist();
+});
+
+// ================================================================
+// DIRECT DRIVE API UPLOAD (XMLHttpRequest for progress events)
+// ================================================================
+function uploadToDriveAPI(file, onProgress) {
+  return new Promise(function(resolve, reject){
+    // Step A: Create resumable upload session
+    fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable', {
+      method:'POST',
+      headers:{
+        'Authorization':'Bearer '+accessToken,
+        'Content-Type':'application/json',
+        'X-Upload-Content-Type': file.type || 'audio/mpeg',
+        'X-Upload-Content-Length': file.size,
+      },
+      body: JSON.stringify({
+        name: file.name,
+        parents: [DRIVE_FOLDER_ID],
+      }),
+    })
+    .then(function(res){
+      if(!res.ok) return res.text().then(function(t){ throw new Error('Session error: '+t); });
+      var uploadUrl = res.headers.get('Location');
+
+      // Step B: Upload file to the session URL with progress
+      var xhr = new XMLHttpRequest();
+      xhr.open('PUT', uploadUrl);
+      xhr.setRequestHeader('Content-Type', file.type || 'audio/mpeg');
+
+      xhr.upload.onprogress = function(e){
+        if(e.lengthComputable) onProgress(Math.round((e.loaded/e.total)*100));
+      };
+      xhr.onload = function(){
+        if(xhr.status===200 || xhr.status===201){
+          resolve(JSON.parse(xhr.responseText));
+        } else {
+          reject(new Error('Upload failed: HTTP '+xhr.status));
+        }
+      };
+      xhr.onerror = function(){ reject(new Error('Network error during upload')); };
+      xhr.send(file);
+    })
+    .catch(reject);
+  });
+}
+
+function updateProgress(p,l){
+  document.getElementById('progress-fill').style.width=p+'%';
+  document.getElementById('progress-text').textContent=l||'Uploading...';
+  document.getElementById('progress-pct').textContent=Math.round(p)+'%';
+}
+
+// ================================================================
+// LIBRARY
+// ================================================================
+async function loadSongs(){
+  document.getElementById('song-count').textContent='Loading...';
+  try {
+    allSongs=await callServer('getSongList');
+    renderTable(allSongs);
+    document.getElementById('song-count').textContent=allSongs.length+' tracks';
+  } catch(e){
+    document.getElementById('song-tbody').innerHTML='<tr><td colspan="5" class="no-songs">⚠️ '+esc(e.message)+'</td></tr>';
+    document.getElementById('song-count').textContent='Error';
+  }
+}
+
+document.getElementById('search-input').addEventListener('input',function(){
+  var q=this.value.toLowerCase();
+  renderTable(q?allSongs.filter(function(s){ return s.filename.toLowerCase().includes(q)||s.uploader.toLowerCase().includes(q); }):allSongs);
+});
+document.getElementById('refresh-btn').addEventListener('click',loadSongs);
+
+function renderTable(songs){
+  var tbody=document.getElementById('song-tbody');
+  if(!songs.length){ tbody.innerHTML='<tr><td colspan="5" class="no-songs">No songs yet — upload some!</td></tr>'; return; }
+  tbody.innerHTML=songs.map(function(s){
+    return '<tr>'
+      +'<td class="filename-cell" title="'+esc(s.filename)+'">'+esc(s.filename)+'</td>'
+      +'<td><span class="uploader-badge">'+esc(s.uploader)+'</span></td>'
+      +'<td style="color:var(--muted);font-size:0.77rem">'+esc(String(s.date))+'</td>'
+      +'<td style="color:var(--muted);font-size:0.77rem">'+s.sizeMB+' MB</td>'
+      +'<td>'+(s.fileUrl?'<a class="drive-link" href="'+esc(s.fileUrl)+'" target="_blank">▶ Open</a>':'—')+'</td>'
+    +'</tr>';
+  }).join('');
+}
+
+// ================================================================
+// FULL CHECKLIST
+// ================================================================
+async function fetchPlaylist(){
+  var area=document.getElementById('checklist-area');
+  area.innerHTML='<div class="checklist-loading"><div class="spinner"></div><br>Loading checklist...</div>';
+  document.getElementById('fetch-btn').disabled=true;
+  try{
+    var result=await callServer('getPlaylistChecklist',{checklistThreshold:checklistThreshold});
+    if(!result.success){ area.innerHTML='<div class="checklist-loading">⚠️ '+esc(result.message)+'</div>'; return; }
+    checklistData=result; clFilter='all'; renderChecklist();
+    showToast('✅ '+result.totalTracks+' tracks loaded!','success');
+  }catch(e){
+    area.innerHTML='<div class="checklist-loading">❌ '+esc(e.message)+'</div>';
+    showToast('❌ '+e.message,'error');
+  }finally{ document.getElementById('fetch-btn').disabled=false; }
+}
+
+async function refreshChecklist(){
+  try{
+    var r=await callServer('getPlaylistChecklist',{checklistThreshold:checklistThreshold});
+    if(r.success){checklistData=r; renderChecklist();}
+  }catch(e){}
+}
+
+function setFilter(f){
+  clFilter=f;
+  document.querySelectorAll('.filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('filter-'+f).classList.add('active');
+  renderChecklist();
+}
+
+function renderChecklist(){
+  if(!checklistData) return;
+  var d=checklistData;
+  var pct=d.totalTracks>0?Math.round((d.uploadedCount/d.totalTracks)*100):0;
+  var items=d.checklist;
+  if(clFilter==='uploaded') items=items.filter(function(t){ return t.uploaded; });
+  if(clFilter==='missing')  items=items.filter(function(t){ return !t.uploaded; });
+
+  var html='<div class="playlist-meta">'
+    +'<div><div class="playlist-name">🎵 '+esc(d.playlistName||'Playlist')+'</div>'
+    +'<div style="margin-top:5px;background:var(--border);border-radius:99px;height:4px;overflow:hidden;min-width:160px">'
+    +'<div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,var(--green),#1db954);border-radius:99px;transition:width 0.5s"></div></div>'
+    +'<div style="font-size:0.73rem;color:var(--muted);margin-top:3px">'+pct+'% uploaded</div></div>'
+    +'<span class="stat-pill total">🎵 '+d.totalTracks+'</span>'
+    +'<span class="stat-pill done">✅ '+d.uploadedCount+'</span>'
+    +'<span class="stat-pill todo">⏳ '+d.missingCount+'</span>'
+    +'</div>'
+    +'<div class="checklist-filters">'
+    +'<button class="filter-btn'+(clFilter==='all'?' active':'')+'" id="filter-all" onclick="setFilter(\'all\')">All ('+d.totalTracks+')</button>'
+    +'<button class="filter-btn'+(clFilter==='missing'?' active':'')+'" id="filter-missing" onclick="setFilter(\'missing\')">⏳ Missing ('+d.missingCount+')</button>'
+    +'<button class="filter-btn'+(clFilter==='uploaded'?' active':'')+'" id="filter-uploaded" onclick="setFilter(\'uploaded\')">✅ Uploaded ('+d.uploadedCount+')</button>'
+    +'</div>'
+    +'<div class="checklist">';
+
+  if(!items.length){ html+='<div class="no-songs" style="padding:28px">No tracks match this filter.</div>'; }
+  else items.forEach(function(track){
+    var origIdx=d.checklist.indexOf(track)+1;
+    var simColor=track.similarity>=80?'var(--green)':track.similarity>=50?'var(--yellow)':'var(--accent)';
+    html+='<div class="cl-item '+(track.uploaded?'is-uploaded':'is-missing')+'" data-copy="'+esc(track.spotifyLabel)+'">'
+      +'<div class="cl-num">'+origIdx+'</div>'
+      +'<div>'+(track.uploaded?'✅':'⏳')+'</div>'
+      +'<div class="cl-info">'
+        +'<div class="cl-title">'+esc(track.spotifyTitle)+'</div>'
+        +(track.spotifyArtist?'<div class="cl-artist">'+esc(track.spotifyArtist)+'</div>':'')
+        +(track.uploaded&&track.matchedFile?'<div class="cl-match">📁 '+esc(track.matchedFile)+'</div>':'')
+      +'</div>'
+      +(track.matchedFile?'<div class="sim-bar" title="'+track.similarity+'% match"><div style="font-size:0.68rem;color:var(--muted);text-align:right;margin-bottom:2px">'+track.similarity+'%</div><div class="sim-bar-bg"><div class="sim-bar-fill" style="width:'+track.similarity+'%;background:'+simColor+'"></div></div></div>':'')
+      +'<span class="cl-badge '+(track.uploaded?'badge-uploaded':'badge-missing')+'">'+(track.uploaded?'✅':'⏳')+'</span>'
+    +'</div>';
+  });
+
+  html+='</div>';
+  document.getElementById('checklist-area').innerHTML=html;
+}
+
+// ================================================================
+// MINI CHECKLIST
+// ================================================================
+async function loadMiniChecklist(){
+  try{
+    var r=await callServer('getPlaylistChecklist',{checklistThreshold:checklistThreshold});
+    if(r.success){ miniData=r; renderMiniChecklist(); }
+  }catch(e){
+    document.getElementById('mini-cl-list').innerHTML='<div class="mini-cl-loading" style="color:var(--accent)">⚠️ '+esc(e.message)+'</div>';
+  }
+}
+
+async function refreshMiniChecklist(){
+  try{
+    var r=await callServer('getPlaylistChecklist',{checklistThreshold:checklistThreshold});
+    if(r.success){ miniData=r; renderMiniChecklist(); if(checklistData){checklistData=r;renderChecklist();} }
+  }catch(e){}
+}
+
+function setMiniFilter(f){
+  miniFilter=f;
+  document.querySelectorAll('.mini-filter-btn').forEach(function(b){ b.classList.remove('active'); });
+  document.getElementById('mini-filter-'+f).classList.add('active');
+  renderMiniChecklist();
+}
+
+function renderMiniChecklist(){
+  if(!miniData) return;
+  var d=miniData;
+  var pct=d.totalTracks>0?Math.round((d.uploadedCount/d.totalTracks)*100):0;
+  document.getElementById('mini-done-stat').textContent='✅ '+d.uploadedCount+' uploaded';
+  document.getElementById('mini-todo-stat').textContent='⏳ '+d.missingCount+' missing';
+  document.getElementById('mini-progress-fill').style.width=pct+'%';
+
+  var items=d.checklist;
+  if(miniFilter==='uploaded') items=items.filter(function(t){ return t.uploaded; });
+  if(miniFilter==='missing')  items=items.filter(function(t){ return !t.uploaded; });
+
+  var list=document.getElementById('mini-cl-list');
+  if(!items.length){ list.innerHTML='<div class="mini-cl-loading">Nothing for this filter.</div>'; return; }
+
+  list.innerHTML=items.map(function(track){
+    var origIdx=d.checklist.indexOf(track)+1;
+    return '<div class="mini-cl-item '+(track.uploaded?'done':'missing')+'" data-copy="'+esc(track.spotifyLabel)+'">'
+      +'<div class="mini-cl-num">'+origIdx+'</div>'
+      +'<div>'+(track.uploaded?'✅':'⏳')+'</div>'
+      +'<div class="mini-cl-name">'
+        +'<div class="track-title">'+esc(track.spotifyTitle)+'</div>'
+        +'<div class="track-artist">'+esc(track.spotifyArtist)+'</div>'
+      +'</div>'
+      +'<span class="mini-cl-badge '+(track.uploaded?'badge-done':'badge-missing')+'">'+(track.uploaded?'✅':'⏳')+'</span>'
+    +'</div>';
+  }).join('');
+}
+
+// ================================================================
+// COPY ON CLICK
+// ================================================================
+document.addEventListener('click',function(e){
+  var el=e.target.closest('[data-copy]');
+  if(!el) return;
+  var label=el.getAttribute('data-copy');
+  navigator.clipboard.writeText(label).catch(function(){
+    var ta=document.createElement('textarea');
+    ta.value=label; ta.style.cssText='position:fixed;opacity:0';
+    document.body.appendChild(ta); ta.select(); document.execCommand('copy'); document.body.removeChild(ta);
+  });
+  var t=document.getElementById('copy-toast');
+  t.textContent='📋 '+(label.length>45?label.substring(0,45)+'...':label);
+  t.classList.add('show'); clearTimeout(t._ct);
+  t._ct=setTimeout(function(){ t.classList.remove('show'); },1800);
+});
+
+// ================================================================
+// HELPERS
+// ================================================================
+// Apps Script web app URL — update this if you ever create a new deployment
+var APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzdAp8k3me8AGuyeOylfyvHtv63_pGfptp9woStfbjNk2BYXft14kKEt4pFbBYf14zn/exec';
+
+function callServer(fn, args) {
+  var body = JSON.stringify({ fn: fn, args: args !== undefined ? args : {} });
+  return fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' }, // text/plain avoids CORS preflight
+    body: body,
+  })
+  .then(function(res) {
+    if (!res.ok) throw new Error('Server error: ' + res.status);
+    return res.json();
+  })
+  .then(function(data) {
+    if (data.error) throw new Error(data.error);
+    return data.result;
+  });
+}
+
+function formatSize(b){
+  if(b<1024) return b+' B';
+  if(b<1048576) return (b/1024).toFixed(1)+' KB';
+  return (b/1048576).toFixed(2)+' MB';
+}
+
+function esc(s){
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function showToast(msg,type){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast-'+(type||'success')+' show';
+  clearTimeout(t._t); t._t=setTimeout(function(){ t.classList.remove('show'); },4000);
+}
+
+// Init
+loadSongs();
+loadMiniChecklist();
+</script>
+</body>
+</html>
